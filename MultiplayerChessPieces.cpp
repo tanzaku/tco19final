@@ -290,14 +290,27 @@ void solve()
     }
 
     // TODO Calculate real score
-    vector<int> cnt(C, 0);
+    // vector<int> cnt(C, 0);
+    // for (int p = 0; p < N2; p++) {
+    //   if (curRegion[p] >= 0) {
+    //     cnt[curRegion[p]]++;
+    //   }
+    // }
+    // curScore = *min_element(cnt.begin(), cnt.end());
+
+    vector<int> scores(C, 0);
     for (int p = 0; p < N2; p++) {
-      if (curRegion[p] >= 0) {
-        cnt[curRegion[p]]++;
+      if (grid[p] != '#' && curRegion[p] >= 0) {
+        for (auto candidatePiece : candidatePieces) {
+          if (canPutPiece(curRegion, p, candidatePiece)) {
+            scores[curRegion[p]] += points[candidatePiece];
+            break;
+          }
+        }
       }
     }
 
-    curScore = *min_element(cnt.begin(), cnt.end());
+    curScore = *min_element(scores.begin(), scores.end());
     if (bestScore < curScore) {
       bestScore = curScore;
       bestRegion = curRegion;
@@ -305,7 +318,6 @@ void solve()
   }
 
   vector<int> scores(C, 0);
-  vector<char> out(2 * N * N);
   for (int p = 0; p < N2; p++) {
     if (grid[p] != '#' && bestRegion[p] >= 0) {
       for (auto candidatePiece : candidatePieces) {
