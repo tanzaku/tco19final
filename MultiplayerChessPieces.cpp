@@ -249,8 +249,10 @@ void solve()
   bestPiece.resize(N2);
   bestScore = -100000;
 
-  // for (int _ = 0; _ < 100; _++) {
+  int iter = 0;
   while (timer.elapsed() < 9500) {
+    iter++;
+
     vector<queue<int>> que(C);
     for (int i = 0; i < C; i++) {
       // TODO start from side?
@@ -302,17 +304,21 @@ void solve()
     }
   }
 
+  vector<int> scores(C, 0);
   vector<char> out(2 * N * N);
   for (int p = 0; p < N2; p++) {
-    if (bestRegion[p] >= 0) {
+    if (grid[p] != '#' && bestRegion[p] >= 0) {
       for (auto candidatePiece : candidatePieces) {
         if (canPutPiece(bestRegion, p, candidatePiece)) {
           bestPiece[p] = PIECE[candidatePiece];
+          scores[bestRegion[p]] += points[candidatePiece];
           break;
         }
       }
     }
   }
+
+  cerr << "iter=" << iter << ", score=" << *min_element(scores.begin(), scores.end()) << endl;
 }
 
 class MultiplayerChessPieces
