@@ -9,3 +9,4 @@ for i in $(seq 1 10); do
 done
 
 # java -jar tester.jar -exec "./a.out" -seed 2 -size 15
+# java -jar tester.jar -exec "./a.out" -seed 2 -size 15

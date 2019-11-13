@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <map>
@@ -30,15 +31,125 @@ public:
 
 class XorShiftL
 {
+  static const int LOG_CACHE_SIZE = 0x10000;
+  int logIndex = 0;
+  array<double, LOG_CACHE_SIZE> logCache;
   uint64_t x = 88172645463325252LL;
 
 public:
+  XorShiftL()
+  {
+    for (int i = 0; i < LOG_CACHE_SIZE; i++) {
+      logCache[i] = log((i + 0.5) / 0x10000);
+    }
+    shuffle(logCache);
+  }
   uint64_t xor64()
   {
     x = x ^ (x << 7);
     return x = x ^ (x >> 9);
   }
   int nextInt(int n) { return xor64() % n; }
+
+  double nextLog()
+  {
+    const double res = logCache[logIndex++];
+    if (logIndex == LOG_CACHE_SIZE) logIndex = 0;
+    return res;
+  }
+
+  template <typename T>
+  void shuffle(T &s)
+  {
+    for (int i = 1; i < (int)s.size(); i++) {
+      int j = nextInt(i + 1);
+      if (i != j) {
+        std::swap(s[i], s[j]);
+      }
+    }
+  }
+};
+
+class FSet
+{
+  int capacity;
+  int len;
+  vector<int> value;
+  vector<int> index;
+
+  void swapValue(int i, int j)
+  {
+    auto &x = value[i];
+    auto &y = value[j];
+    // cerr << "FSet " << i << " " << j << " " << x << " "  << y << endl;
+    std::swap(x, y);
+    std::swap(index[x], index[y]);
+  }
+
+public:
+  void init(int c)
+  {
+    capacity = c;
+    len = 0;
+    value.clear();
+    value.reserve(capacity);
+    index.clear();
+    index.reserve(capacity);
+    for (int i = 0; i < capacity; i++) {
+      value.push_back(i);
+      index.push_back(i);
+    }
+  }
+
+  vector<int>::iterator begin()
+  {
+    return value.begin();
+  }
+
+  vector<int>::iterator end()
+  {
+    return value.begin() + len;
+  }
+
+  bool contains(int v) const
+  {
+    return index[v] < len;
+  }
+
+  int size() const { return len; }
+  int unusedSize() const { return capacity - len; }
+
+  void removeByValue(int v)
+  {
+    removeByIndex(index[v]);
+  }
+
+  void removeByIndex(int i)
+  {
+    if (i >= len) return;
+    len--;
+    swapValue(i, len);
+  }
+
+  void insertByValue(int v)
+  {
+    insertByIndex(index[v]);
+  }
+
+  void insertByIndex(int i)
+  {
+    if (i < len) return;
+    // cerr << "FSet " << i << " " << len << " " << index.size() << endl;
+    swapValue(i, len);
+    len++;
+  }
+
+  void clear() { len = 0; }
+
+  int operator[](int i) const
+  {
+    return value[i];
+  }
 };
 
 const int MAX_N = 50;
@@ -56,6 +167,9 @@ vector<vector<vector<vector<int>>>> moves; // moves[pos][piece kind][dir][idx]
 
 const string PIECE = "KQRBN";
 vector<int> candidatePieces;
+
+vector<FSet> attackedBy;
+vector<vector<int>> attackTo;
 
 int P(int x, int y)
 {
@@ -203,10 +317,17 @@ void init(int N_, int C_, char grid_[], int points_[])
   sort(candidatePieces.begin(), candidatePieces.end(), [](int i, int j) {
     return points[i] > points[j];
   });
+
+  attackedBy.resize(N2);
+  attackTo.resize(N2);
+  for (auto &ab : attackedBy) {
+    ab.init(N2);
+  }
 }
 
 int curScore;
 vector<int> curRegion;
+vector<int> curPiece;
 
 int bestScore;
 vector<int> bestRegion;
@@ -229,34 +350,134 @@ bool can(int p, int c)
   return true;
 }
 
-bool canPutPiece(vector<int> &region, int p, int piece)
+bool canPutPiece(vector<int> &region, int p, int piece, bool debug)
 {
   for (auto &qs : moves[p][piece]) {
     for (int q : qs) {
+      // if (debug)
+      //   cerr << __FUNCTION__ << " " << p % N << " " << p / N << " " << q % N << " " << q / N << " " << region[q] << endl;
+
       if (region[q] >= 0) {
-        if (region[q] != region[p]) return false;
+        if (region[q] != region[p]) {
+          // if (debug)
+          //   cerr << "Cannot put " << p % N << " " << p / N << " " << q % N << " " << q / N << endl;
+          return false;
+        }
         break;
       }
     }
   }
+  if (debug)
+    cerr << "Put " << p % N << " " << p / N << " " << endl;
   return true;
+}
+
+int calcPlaceGreedyPiece(int p, vector<int> &region, bool debug = false)
+{
+  if (grid[p] != '#' && region[p] >= 0) {
+    for (auto candidatePiece : candidatePieces) {
+      if (canPutPiece(region, p, candidatePiece, debug)) {
+        return candidatePiece;
+      }
+    }
+  }
+  return -1;
+}
+
+void updateAttackedCellAtPutPiece(int p, int piece, vector<int> &region)
+{
+  for (auto &qs : moves[p][piece]) {
+    for (int q : qs) {
+      attackedBy[q].insertByValue(p);
+      attackTo[p].push_back(q);
+      if (region[q] >= 0) {
+        break;
+      }
+    }
+  }
+}
+
+void updateAttackedCellAtRemovePiece(int p)
+{
+  for (auto &q : attackTo[p]) {
+    attackedBy[q].removeByValue(p);
+  }
+  attackTo[p].clear();
+}
+
+double calcTemp(double startTime, double endTime, double curTime, double startTemp, double endTemp)
+{
+  const double c = 1 - (curTime - startTime) / (endTime - startTime);
+  return c * (startTemp - endTemp) + endTemp;
+}
+
+void verifyAttackedCell()
+{
+  vector<int> attackedCnt(N2, 0);
+  for (int p = 0; p < N2; p++) {
+    int r = curRegion[p];
+    if (r < 0 || grid[p] == '#') {
+      if (!attackTo[p].empty()) {
+        cerr << "Illegal state : " << __LINE__ << endl;
+        throw;
+      }
+      continue;
+    }
+    int attackCnt = 0;
+    int piece = curPiece[p];
+    for (auto &qs : moves[p][piece]) {
+      for (int q : qs) {
+        attackedCnt[q]++;
+        attackCnt++;
+        // cerr << "attack to " << q % N << " " << q / N << endl;
+        if (curRegion[q] >= 0) {
+          break;
+        }
+      }
+    }
+    if (attackCnt != (int)attackTo[p].size()) {
+      cerr << "Illegal state : " << __LINE__ << " " << p % N << " " << p / N << " " << attackCnt << " " << attackTo[p].size() << endl;
+      for (int q : attackTo[p]) {
+        cerr << "Illegal state attackTo : " << __LINE__ << " " << q % N << " " << q / N << endl;
+      }
+      return;
+      // throw;
+    }
+  }
+  for (int p = 0; p < N2; p++) {
+    if (attackedCnt[p] != (int)attackedBy[p].size()) {
+      cerr << "Illegal state : " << __LINE__ << endl;
+      return;
+      // throw;
+    }
+  }
 }
 
 void solve()
 {
   curRegion.resize(N2);
   bestRegion.resize(N2);
+  curPiece.resize(N2);
   bestPiece.resize(N2);
   bestScore = -100000;
 
-  int iter = 0;
-  while (timer.elapsed() < 9500) {
-    iter++;
+  vector<int> scores(C, 0);
+
+  int iter1 = 0;
+  int iter2 = 0;
+  // while (timer.elapsed() < 9500) {
+  while (timer.elapsed() < 2000) {
+    // while (iter1 < 1000) { // for
+    iter1++;
 
     vector<queue<int>> que(C);
     for (int i = 0; i < C; i++) {
-      // TODO start from side?
-      que[i].emplace(rng.nextInt(N2));
+      while (1) {
+        int p = rng.nextInt(N2);
+        if (grid[p] == '#') continue;
+        que[i].emplace(p);
+        break;
+      }
     }
 
     fill(curRegion.begin(), curRegion.end(), -1);
@@ -268,16 +489,12 @@ void solve()
         while (!que[c].empty()) {
           tie(p) = que[c].front();
           que[c].pop();
-          // cerr << p << " " << c << endl;
           if (!can(p, c)) {
             continue;
           }
           for (int q : neighbor[p]) {
             que[c].push(q);
           }
-          // if (grid[p] == '#') {
-          //   continue;
-          // }
           curRegion[p] = c;
           if (grid[p] == '#') {
             continue;
@@ -289,24 +506,11 @@ void solve()
       if (!updated) break;
     }
 
-    // TODO Calculate real score
-    // vector<int> cnt(C, 0);
-    // for (int p = 0; p < N2; p++) {
-    //   if (curRegion[p] >= 0) {
-    //     cnt[curRegion[p]]++;
-    //   }
-    // }
-    // curScore = *min_element(cnt.begin(), cnt.end());
-
-    vector<int> scores(C, 0);
+    fill(scores.begin(), scores.end(), 0);
     for (int p = 0; p < N2; p++) {
-      if (grid[p] != '#' && curRegion[p] >= 0) {
-        for (auto candidatePiece : candidatePieces) {
-          if (canPutPiece(curRegion, p, candidatePiece)) {
-            scores[curRegion[p]] += points[candidatePiece];
-            break;
-          }
-        }
+      int pi = calcPlaceGreedyPiece(p, curRegion);
+      if (pi >= 0) {
+        scores[curRegion[p]] += points[pi];
       }
     }
 
@@ -315,22 +519,124 @@ void solve()
       bestScore = curScore;
       bestRegion = curRegion;
     }
+    // cerr << curScore << endl;
   }
 
-  vector<int> scores(C, 0);
+  curRegion = bestRegion;
+  curPiece = bestPiece;
+
+  // calculate curPiece
+  fill(scores.begin(), scores.end(), 0);
   for (int p = 0; p < N2; p++) {
-    if (grid[p] != '#' && bestRegion[p] >= 0) {
-      for (auto candidatePiece : candidatePieces) {
-        if (canPutPiece(bestRegion, p, candidatePiece)) {
-          bestPiece[p] = PIECE[candidatePiece];
-          scores[bestRegion[p]] += points[candidatePiece];
-          break;
-        }
-      }
+    int pi = calcPlaceGreedyPiece(p, curRegion);
+    if (pi >= 0) {
+      curPiece[p] = pi;
+      scores[curRegion[p]] += points[pi];
+      updateAttackedCellAtPutPiece(p, pi, curRegion);
     }
   }
 
-  cerr << "iter=" << iter << ", score=" << *min_element(scores.begin(), scores.end()) << endl;
+  // annealing best solution
+  FSet emptyPos;
+  emptyPos.init(N2);
+
+  for (int p = 0; p < N2; p++) {
+    if (curRegion[p] >= 0 || grid[p] == '#') {
+      continue;
+    }
+    emptyPos.insertByValue(p);
+  }
+
+  bestScore = *min_element(scores.begin(), scores.end());
+  bestRegion = curRegion;
+  bestPiece = curPiece;
+
+  FSet updatePos;
+  updatePos.init(N2);
+  vector<int> newScores(C);
+
+  double t0 = timer.elapsed();
+  // vector<int> oldPieces;
+  while (1) {
+    const double t = timer.elapsed();
+    if (t >= 9500) break;
+    const double temp = calcTemp(t0, 9500, t, 100, 10);
+    // for (int _ = 0; _ < 100; _++) {
+    iter2++;
+
+    int c = rng.nextInt(C);
+    if (emptyPos.size() == 0) continue;
+    if (scores[c] != *min_element(scores.begin(), scores.end())) continue;
+    int p = emptyPos[rng.nextInt(emptyPos.size())];
+
+    if (curRegion[p] >= 0) {
+      cerr << "Illegal state : " << __LINE__ << endl;
+      throw;
+    }
+
+    const int prevScore = *min_element(scores.begin(), scores.end());
+    bool ok = false;
+    for (auto q : neighbor[p]) {
+      if (curRegion[q] >= 0 && prevScore == scores[curRegion[q]]) {
+        ok = true;
+        break;
+      }
+    }
+    if (!ok) continue;
+
+    const int PUT_PIECE_IDX = 4; // is knight
+    curRegion[p] = c;
+    curPiece[p] = PUT_PIECE_IDX;
+
+    // remove all
+    emptyPos.removeByValue(p);
+    vector<pair<int, int>> removed;
+    for (int q : neighbor[p]) {
+      if (curRegion[q] >= 0 && curRegion[q] != c) {
+        removed.emplace_back(q, curRegion[q]);
+        emptyPos.insertByValue(q);
+        curRegion[q] = -1;
+      }
+    }
+
+    fill(newScores.begin(), newScores.end(), 0);
+    for (int q = 0; q < N2; q++) {
+      int pi = calcPlaceGreedyPiece(q, curRegion);
+      if (pi >= 0) {
+        curPiece[q] = pi;
+        newScores[curRegion[q]] += points[pi];
+      }
+    }
+
+    int oldScore = *min_element(scores.begin(), scores.end());
+    int newScore = *min_element(newScores.begin(), newScores.end());
+    // for (int i = 0; i < C; i++) {
+    //   cerr << i << " " << scores[i] << " -> " << newScores[i] << endl;
+    // }
+    // cerr << t << " " << temp << " " << rng.nextLog() << endl;
+    const double diff = (-newScore) - (-oldScore);
+    if (diff <= -temp * rng.nextLog()) {
+      // cerr << oldScore << " -> " << newScore << endl;
+      scores = newScores;
+
+      if (bestScore < newScore) {
+        bestScore = newScore;
+        bestRegion = curRegion;
+        bestPiece = curPiece;
+      }
+
+      continue;
+    }
+
+    emptyPos.insertByValue(p);
+    curRegion[p] = -1;
+    for (auto q : removed) {
+      emptyPos.removeByValue(q.first);
+      curRegion[q.first] = q.second;
+    }
+  }
+
+  cerr << "iter1=" << iter1 << ", iter2=" << iter2 << ", score=" << *min_element(scores.begin(), scores.end()) << endl;
 }
 
 class MultiplayerChessPieces
@@ -347,7 +653,7 @@ public:
     for (int r = 0, cur = 0; r < N; r++)
       for (int c = 0; c < N; c++, cur++) {
         if (bestRegion[cur] >= 0 && grid[cur] == '.') {
-          out[cur] = bestPiece[cur];
+          out[cur] = PIECE[bestPiece[cur]];
           out[cur + N * N] = (char)('0' + bestRegion[cur]);
         } else {
           out[cur] = grid[cur];
