@@ -50,6 +50,8 @@ array<int, 5> points;
 array<vector<int>, MAX_N2> neighbor;
 XorShiftL rng;
 
+Timer timer;
+
 vector<vector<vector<vector<int>>>> moves; // moves[pos][piece kind][dir][idx]
 
 const string PIECE = "KQRBN";
@@ -247,7 +249,8 @@ void solve()
   bestPiece.resize(N2);
   bestScore = -100000;
 
-  for (int _ = 0; _ < 100; _++) {
+  // for (int _ = 0; _ < 100; _++) {
+  while (timer.elapsed() < 9500) {
     vector<queue<int>> que(C);
     for (int i = 0; i < C; i++) {
       // TODO start from side?
@@ -340,6 +343,7 @@ public:
 
 int main()
 {
+  timer.reset();
   MultiplayerChessPieces cp;
   int N_;
   int C_;
