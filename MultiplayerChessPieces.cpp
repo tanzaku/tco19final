@@ -180,7 +180,7 @@ void init(int N_, int C_, char grid_[], int points_[])
       // knight
       for (int dy = -2; dy <= 2; dy++) {
         for (int dx = -2; dx <= 2; dx++) {
-          if (!((abs(dx) == 2 && abs(dy) == 1) && (abs(dx) == 1 && abs(dy) == 2))) {
+          if (!((abs(dx) == 2 && abs(dy) == 1) || (abs(dx) == 1 && abs(dy) == 2))) {
             continue;
           }
           int tx = x + dx, ty = y + dy, t = P(tx, ty);
@@ -227,7 +227,7 @@ bool can(int p, int c)
   return true;
 }
 
-bool canPutPiece(vector<int> region, int p, int piece)
+bool canPutPiece(vector<int> &region, int p, int piece)
 {
   for (auto &qs : moves[p][piece]) {
     for (int q : qs) {
@@ -304,7 +304,8 @@ void solve()
     if (bestRegion[p] >= 0) {
       for (auto candidatePiece : candidatePieces) {
         if (canPutPiece(bestRegion, p, candidatePiece)) {
-          bestPiece[p] = 'K';
+          bestPiece[p] = PIECE[candidatePiece];
+          break;
         }
       }
     }
