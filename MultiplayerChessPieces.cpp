@@ -480,7 +480,7 @@ void solve()
   while (1) {
     const double t = timer.elapsed();
     if (t >= 9800) break;
-    const double temp = calcTemp(t0, 9800, t, 200, 2.5);
+    const double temp = calcTemp(t0, 9800, t, 100, 2.5);
     // for (int _ = 0; _ < 100; _++) {
     iter2++;
 
