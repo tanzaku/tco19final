@@ -559,8 +559,8 @@ void solve()
   // vector<int> oldPieces;
   while (1) {
     const double t = timer.elapsed();
-    if (t >= 9500) break;
-    const double temp = calcTemp(t0, 9500, t, 100, 10);
+    if (t >= 9800) break;
+    const double temp = calcTemp(t0, 9800, t, 100, 10);
     // for (int _ = 0; _ < 100; _++) {
     iter2++;
 
