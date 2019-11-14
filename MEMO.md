@@ -39,17 +39,6 @@ Score = 576.0
 Score = 18671.0
 Score = 48588.0
 
-## temp 100 -> 0, 
-Score = 215.0
-Score = 42468.0
-Score = 7720.0
-Score = 27187.0
-Score = 2387.0
-Score = 2173.0
-Score = 31342.0
-Score = 576.0
-Score = 18671.0
-Score = 48588.0
 
 
 
