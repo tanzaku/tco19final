@@ -168,9 +168,6 @@ vector<vector<vector<vector<int>>>> moves; // moves[pos][piece kind][dir][idx]
 const string PIECE = "KQRBN";
 vector<int> candidatePieces;
 
-vector<FSet> attackedBy;
-vector<vector<int>> attackTo;
-
 int P(int x, int y)
 {
   return y * N + x;
@@ -317,12 +314,6 @@ void init(int N_, int C_, char grid_[], int points_[])
   sort(candidatePieces.begin(), candidatePieces.end(), [](int i, int j) {
     return points[i] > points[j];
   });
-
-  attackedBy.resize(N2);
-  attackTo.resize(N2);
-  for (auto &ab : attackedBy) {
-    ab.init(N2);
-  }
 }
 
 int curScore;
@@ -350,33 +341,26 @@ bool can(int p, int c)
   return true;
 }
 
-bool canPutPiece(vector<int> &region, int p, int piece, bool debug)
+bool canPutPiece(vector<int> &region, int p, int piece)
 {
   for (auto &qs : moves[p][piece]) {
     for (int q : qs) {
-      // if (debug)
-      //   cerr << __FUNCTION__ << " " << p % N << " " << p / N << " " << q % N << " " << q / N << " " << region[q] << endl;
-
       if (region[q] >= 0) {
         if (region[q] != region[p]) {
-          // if (debug)
-          //   cerr << "Cannot put " << p % N << " " << p / N << " " << q % N << " " << q / N << endl;
           return false;
         }
         break;
       }
     }
   }
-  if (debug)
-    cerr << "Put " << p % N << " " << p / N << " " << endl;
   return true;
 }
 
-int calcPlaceGreedyPiece(int p, vector<int> &region, bool debug = false)
+int calcPlaceGreedyPiece(int p, vector<int> &region)
 {
   if (grid[p] != '#' && region[p] >= 0) {
     for (auto candidatePiece : candidatePieces) {
-      if (canPutPiece(region, p, candidatePiece, debug)) {
+      if (canPutPiece(region, p, candidatePiece)) {
         return candidatePiece;
       }
     }
@@ -384,73 +368,10 @@ int calcPlaceGreedyPiece(int p, vector<int> &region, bool debug = false)
   return -1;
 }
 
-void updateAttackedCellAtPutPiece(int p, int piece, vector<int> &region)
-{
-  for (auto &qs : moves[p][piece]) {
-    for (int q : qs) {
-      attackedBy[q].insertByValue(p);
-      attackTo[p].push_back(q);
-      if (region[q] >= 0) {
-        break;
-      }
-    }
-  }
-}
-
-void updateAttackedCellAtRemovePiece(int p)
-{
-  for (auto &q : attackTo[p]) {
-    attackedBy[q].removeByValue(p);
-  }
-  attackTo[p].clear();
-}
-
 double calcTemp(double startTime, double endTime, double curTime, double startTemp, double endTemp)
 {
   const double c = 1 - (curTime - startTime) / (endTime - startTime);
   return c * (startTemp - endTemp) + endTemp;
-}
-
-void verifyAttackedCell()
-{
-  vector<int> attackedCnt(N2, 0);
-  for (int p = 0; p < N2; p++) {
-    int r = curRegion[p];
-    if (r < 0 || grid[p] == '#') {
-      if (!attackTo[p].empty()) {
-        cerr << "Illegal state : " << __LINE__ << endl;
-        throw;
-      }
-      continue;
-    }
-    int attackCnt = 0;
-    int piece = curPiece[p];
-    for (auto &qs : moves[p][piece]) {
-      for (int q : qs) {
-        attackedCnt[q]++;
-        attackCnt++;
-        // cerr << "attack to " << q % N << " " << q / N << endl;
-        if (curRegion[q] >= 0) {
-          break;
-        }
-      }
-    }
-    if (attackCnt != (int)attackTo[p].size()) {
-      cerr << "Illegal state : " << __LINE__ << " " << p % N << " " << p / N << " " << attackCnt << " " << attackTo[p].size() << endl;
-      for (int q : attackTo[p]) {
-        cerr << "Illegal state attackTo : " << __LINE__ << " " << q % N << " " << q / N << endl;
-      }
-      return;
-      // throw;
-    }
-  }
-  for (int p = 0; p < N2; p++) {
-    if (attackedCnt[p] != (int)attackedBy[p].size()) {
-      cerr << "Illegal state : " << __LINE__ << endl;
-      return;
-      // throw;
-    }
-  }
 }
 
 void solve()
@@ -532,7 +453,6 @@ void solve()
     if (pi >= 0) {
       curPiece[p] = pi;
       scores[curRegion[p]] += points[pi];
-      updateAttackedCellAtPutPiece(p, pi, curRegion);
     }
   }
 
